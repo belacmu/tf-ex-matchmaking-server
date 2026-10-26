@@ -661,7 +661,7 @@ impl Lobby {
     pub fn reset(&mut self) {
         self.players.iter_mut().for_each(|p| p.ready = false);
         self.end_game_choice = Some(vec![]);
-        self.update_seed(rand::thread_rng().gen_range(0..100000));
+        self.update_seed(new_seed());
     }
 
     pub fn ready_all(&mut self) -> usize {
@@ -753,6 +753,14 @@ pub struct Player {
 
 pub fn is_valid_local_players(local_players: usize) -> bool {
     (1..=MAX_LOCAL_PLAYERS).contains(&local_players)
+}
+
+/// A match seed. `TFEX_FIXED_SEED` (tests: scripted inputs that need a known level) gives every match that seed
+pub fn new_seed() -> i32 {
+    std::env::var("TFEX_FIXED_SEED")
+        .ok()
+        .and_then(|seed| seed.trim().parse().ok())
+        .unwrap_or_else(|| rand::thread_rng().gen_range(0..100000))
 }
 
 fn neutral_team() -> i32 {

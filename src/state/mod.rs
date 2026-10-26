@@ -23,7 +23,6 @@ use std::{
 
 use axum_typed_websockets::Message;
 use metrics::{counter, gauge, histogram};
-use rand::Rng;
 use tokio::sync::{mpsc::Sender, Mutex};
 use tracing::{info, warn};
 
@@ -494,7 +493,7 @@ impl AppState {
         host.set_seat(0);
         let owner = host.clone();
 
-        lobby.update_seed(rand::thread_rng().gen_range(0..100000));
+        lobby.update_seed(lobby::new_seed());
 
         let join_code = match lobby.kind() {
             LobbyKind::Private => {

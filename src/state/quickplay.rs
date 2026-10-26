@@ -1,7 +1,6 @@
 use std::{collections::HashMap, net::SocketAddr, time::Instant};
 
 use metrics::{counter, histogram};
-use rand::Rng;
 use tracing::info;
 
 use crate::{
@@ -228,7 +227,7 @@ impl AppState {
                     mode: 3,
                     match_length: 2,
                     variants: vec![],
-                    seed: rand::thread_rng().gen_range(0..100000),
+                    seed: lobby::new_seed(),
                     best_of: 0,
                 })
                 .players(vec![host])
