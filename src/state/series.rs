@@ -394,6 +394,7 @@ impl AppState {
             }
 
             lobby.set_in_game(true);
+            tracing::info!("{}", super::started_line(lobby));
             lobby.clone()
         };
 

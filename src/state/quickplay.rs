@@ -251,6 +251,16 @@ impl AppState {
 
             lobbies.push(lobby.clone());
 
+            info!(
+                "[quickplay] matched {}",
+                lobby
+                    .players()
+                    .iter()
+                    .map(|p| p.name())
+                    .collect::<Vec<_>>()
+                    .join(" vs ")
+            );
+
             histogram!(telemetry::QUICKPLAY_WAIT_SECONDS)
                 .record(partner.queued_at.elapsed().as_secs_f64());
 
@@ -413,6 +423,7 @@ impl AppState {
                 }
 
                 lobby.set_in_game(true);
+                info!("{}", super::started_line(lobby));
                 started.push(lobby.clone());
             }
         }

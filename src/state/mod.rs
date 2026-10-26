@@ -46,6 +46,13 @@ use self::{
     signaling_state::SignalingState,
 };
 
+/// The test harness's line for a match start (the same words as the browser repo's local server)
+pub fn started_line(lobby: &Lobby) -> String {
+    let names: Vec<String> = lobby.players().iter().map(|p| p.name()).collect();
+
+    format!("[lobby] {} started ({})", lobby.room_id(), names.join(" vs "))
+}
+
 pub type IpV4V6 = (SocketAddr, Option<SocketAddr>);
 pub type Clients = Arc<Mutex<HashMap<IpV4V6, Client>>>;
 pub type Lobbies = Arc<Mutex<Vec<Lobby>>>;
@@ -514,6 +521,17 @@ impl AppState {
 
         lobbies.push(final_lobby.clone());
 
+        info!(
+            "[lobby] {} created {:?} lobby {}{}",
+            final_lobby.name(),
+            final_lobby.kind(),
+            final_lobby.room_id(),
+            final_lobby
+                .join_code()
+                .map(|code| format!(" (code {code})"))
+                .unwrap_or_default()
+        );
+
         counter!(telemetry::LOBBIES_CREATED_TOTAL, "kind" => telemetry::kind_label(final_lobby.kind()))
             .increment(1);
 
@@ -666,7 +684,7 @@ impl AppState {
         client.name = name.clone();
 
         let room_peer_id = client
-            .peer_id(room_id)
+            .peer_id(room_id.clone())
             .ok_or("Couldn't retrieve Room peer id")?;
 
         let member = Player::new(
@@ -674,6 +692,13 @@ impl AppState {
             addr.to_string(),
             room_peer_id.clone(),
             false,
+        );
+
+        info!(
+            "[lobby] {} joined {} as {}",
+            client.name,
+            room_id,
+            if is_player { "player" } else { "spectator" }
         );
 
         if is_player {
@@ -853,6 +878,7 @@ impl AppState {
         }
 
         lobby.set_in_game(true);
+        info!("{}", started_line(lobby));
 
         counter!(telemetry::MATCHES_STARTED_TOTAL, "kind" => telemetry::kind_label(lobby.kind()), "trigger" => "manual")
             .increment(1);
