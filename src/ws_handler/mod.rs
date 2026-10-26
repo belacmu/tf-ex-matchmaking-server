@@ -13,8 +13,35 @@ use tracing::info;
 
 use crate::{extensions::clients::ClientsExts, state::AppState};
 
+/// Browser pages allowed to connect (the browser port of TowerFall): the site and local dev servers, plus
+/// `ALLOWED_ORIGINS` (comma separated, `*` for any page)
+const DEFAULT_ALLOWED_ORIGINS: [&str; 1] = ["https://belacmu.github.io"];
+
+fn is_origin_allowed(origin: &str) -> bool {
+    let is_local = ["http://localhost", "http://127.0.0.1"].iter().any(|host| {
+        origin == *host
+            || origin
+                .strip_prefix(host)
+                .and_then(|rest| rest.strip_prefix(':'))
+                .is_some_and(|port| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
+    });
+
+    let extra = std::env::var("ALLOWED_ORIGINS").unwrap_or_default();
+
+    is_local
+        || DEFAULT_ALLOWED_ORIGINS.contains(&origin)
+        || extra
+            .split(',')
+            .map(str::trim)
+            .any(|allowed| allowed == "*" || allowed == origin)
+}
+
 pub async fn refuse_browsers<B>(request: Request<B>, next: Next<B>) -> Response {
     if let Some(origin) = request.headers().get(ORIGIN) {
+        if origin.to_str().is_ok_and(is_origin_allowed) {
+            return next.run(request).await;
+        }
+
         info!(
             "Refusing browser connection to {} from origin {:?}",
             request.uri().path(),
