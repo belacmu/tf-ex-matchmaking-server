@@ -1072,6 +1072,7 @@ pub mod test_support {
                 variants: vec![],
                 seed: 0,
                 best_of: 0,
+                custom_mode: String::new(),
             })
             .players(vec![Player::new(
                 "tester".to_string(),

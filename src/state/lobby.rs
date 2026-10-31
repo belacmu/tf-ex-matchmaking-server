@@ -714,6 +714,9 @@ pub struct GameData {
     /// 0 for single match; 1, 3, 5, 7 for the series length
     #[serde(default)]
     pub best_of: i32,
+    /// The FortRise id ("ModName/ModeName") of a mod's versus mode, empty for the built-in modes
+    #[serde(default)]
+    pub custom_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

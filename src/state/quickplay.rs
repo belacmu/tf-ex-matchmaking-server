@@ -229,6 +229,7 @@ impl AppState {
                     variants: vec![],
                     seed: lobby::new_seed(),
                     best_of: 0,
+                    custom_mode: String::new(),
                 })
                 .players(vec![host])
                 .kind(LobbyKind::QuickPlay)
