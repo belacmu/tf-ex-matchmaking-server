@@ -7,9 +7,6 @@ pub static KEEP_ALIVE_MAX_MISSED: u8 = 6;
 
 pub const MAX_PLAYERS: usize = 4;
 
-/// A wide lobby's seats (WiderSet's wide mode: TF.EX's Constants.MAX_SEATS)
-pub const MAX_WIDE_PLAYERS: usize = 8;
-
 pub const MAX_LOCAL_PLAYERS: usize = 3;
 
 /// How long players get to pick an end match option before the undecided ones are dropped

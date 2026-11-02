@@ -5,7 +5,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::constants::{MAX_LOCAL_PLAYERS, MAX_PLAYERS, MAX_WIDE_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE};
+use crate::constants::{MAX_LOCAL_PLAYERS, MAX_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE};
 use crate::services::geoip::Location;
 use crate::state::connectivity::{peers_of, Connectivity, ConnectivityUpdate, PeerPair};
 use crate::state::series::Series;
@@ -689,22 +689,33 @@ impl Lobby {
 
     /// WiderSet changes level geometry, so wide and standard players can never match
     pub fn is_wide(&self) -> bool {
-        self.mods.iter().any(|m| {
-            m.name() == crate::state::WIDER_SET_MOD_NAME
-                && m.data()
-                    .get("IsWide")
-                    .map(|value| value.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false)
-        })
+        self.wide_seats().is_some()
     }
 
-    /// The most seats a lobby can have: 8 in a wide lobby (WiderSet), 4 otherwise
+    /// A wide lobby's seats: its WiderSet entry's Seats (the host game's TFGame.Players.Length), at least the standard size;
+    /// None when the lobby isn't wide
+    fn wide_seats(&self) -> Option<usize> {
+        self.mods
+            .iter()
+            .find(|m| {
+                m.name() == crate::state::WIDER_SET_MOD_NAME
+                    && m.data()
+                        .get("IsWide")
+                        .map(|value| value.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false)
+            })
+            .map(|m| {
+                m.data()
+                    .get("Seats")
+                    .and_then(|seats| seats.parse::<usize>().ok())
+                    .unwrap_or(MAX_PLAYERS)
+                    .max(MAX_PLAYERS)
+            })
+    }
+
+    /// The most seats a lobby can have: the game's seats in a wide lobby (WiderSet), 4 otherwise
     pub fn seat_cap(&self) -> usize {
-        if self.is_wide() {
-            MAX_WIDE_PLAYERS
-        } else {
-            MAX_PLAYERS
-        }
+        self.wide_seats().unwrap_or(MAX_PLAYERS)
     }
 
     pub fn is_full(&self) -> bool {
@@ -921,7 +932,7 @@ impl LobbyBuilder {
     }
 
     pub fn max_players(mut self, max_players: usize) -> Self {
-        self.max_players = Some(max_players.clamp(2, MAX_WIDE_PLAYERS));
+        self.max_players = Some(max_players.max(2));
         self
     }
 
