@@ -28,6 +28,7 @@ pub struct QuickplayQueued {
     pub location: Location,
     pub is_wide: bool,
     pub local_players: usize,
+    pub game_logic_speed: String,
     pub queued_at: Instant,
 }
 
@@ -38,6 +39,10 @@ impl QueueEntry for QuickplayQueued {
 
     fn is_wide(&self) -> bool {
         self.is_wide
+    }
+
+    fn fixed_tick_rate(&self) -> Option<u32> {
+        lobby::fixed_tick_rate(&self.game_logic_speed)
     }
 }
 
@@ -91,6 +96,7 @@ impl AppState {
         name: String,
         is_wide: bool,
         local_players: usize,
+        game_logic_speed: String,
     ) -> QuickPlayOutcome {
         if self.is_draining() {
             return QuickPlayOutcome::Failed {
@@ -131,11 +137,15 @@ impl AppState {
 
         queue.retain(|q| q.addr != addr);
 
-        if let Some(lobby) =
-            Self::nearest_open_quick_play(&mut lobbies, &location, is_wide, local_players)
-        {
+        if let Some(lobby) = Self::nearest_open_quick_play(
+            &mut lobbies,
+            &location,
+            is_wide,
+            local_players,
+            &game_logic_speed,
+        ) {
             return match self
-                .seat_member(lobby, addr, name, true, local_players)
+                .seat_member(lobby, addr, name, true, local_players, game_logic_speed)
                 .await
             {
                 Ok(room_peer_id) => QuickPlayOutcome::Seated {
@@ -149,7 +159,11 @@ impl AppState {
         let partner_index = queue
             .iter()
             .enumerate()
-            .filter(|(_, q)| q.is_wide == is_wide && q.local_players + local_players <= MAX_PLAYERS)
+            .filter(|(_, q)| {
+                q.is_wide == is_wide
+                    && q.local_players + local_players <= MAX_PLAYERS
+                    && lobby::game_logic_speeds_compatible(&q.game_logic_speed, &game_logic_speed)
+            })
             .min_by_key(|(_, q)| q.location.distance_to(location.clone()) as i64)
             .map(|(index, _)| index);
 
@@ -175,6 +189,7 @@ impl AppState {
                     location,
                     is_wide,
                     local_players,
+                    game_logic_speed,
                     queued_at: Instant::now(),
                 });
 
@@ -209,6 +224,7 @@ impl AppState {
                 true,
             );
             host.set_seat(0);
+            host.set_game_logic_speed(partner.game_logic_speed.clone());
             let owner = host.clone();
 
             let mods = if is_wide {
@@ -239,15 +255,14 @@ impl AppState {
                 .build();
 
             lobby.add_guests(&owner, partner.local_players);
-            lobby.add_player_device(
-                Player::new(
-                    name.clone(),
-                    addr.to_string(),
-                    caller_peer_id.clone(),
-                    false,
-                ),
-                local_players,
+            let mut caller = Player::new(
+                name.clone(),
+                addr.to_string(),
+                caller_peer_id.clone(),
+                false,
             );
+            caller.set_game_logic_speed(game_logic_speed);
+            lobby.add_player_device(caller, local_players);
 
             lobbies.push(lobby.clone());
 
@@ -268,6 +283,7 @@ impl AppState {
             location,
             is_wide,
             local_players,
+            game_logic_speed,
             queued_at: Instant::now(),
         });
 
@@ -287,6 +303,7 @@ impl AppState {
         location: &Location,
         is_wide: bool,
         local_players: usize,
+        game_logic_speed: &str,
     ) -> Option<&'a mut Lobby> {
         lobbies
             .iter_mut()
@@ -295,6 +312,7 @@ impl AppState {
                     && !l.in_game()
                     && l.free_seats() >= local_players
                     && lobby_is_wide(l) == is_wide
+                    && l.accepts_game_logic_speed(game_logic_speed)
             })
             .min_by_key(|l| {
                 l.origin()
@@ -329,6 +347,7 @@ impl AppState {
                     &queued.location,
                     queued.is_wide,
                     queued.local_players,
+                    &queued.game_logic_speed,
                 );
 
                 match target {
@@ -340,6 +359,7 @@ impl AppState {
                                 queued.name.clone(),
                                 true,
                                 queued.local_players,
+                                queued.game_logic_speed.clone(),
                             )
                             .await
                         {
@@ -448,6 +468,8 @@ impl AppState {
                 queued: true,
                 searching_standard: counts.standard,
                 searching_wide: counts.wide,
+                searching_hz60: counts.hz60,
+                searching_hz240: counts.hz240,
                 message: "".to_string(),
             },
         )
@@ -484,18 +506,19 @@ mod tests {
         let state = state_with_clients(&[first, second, third]).await;
 
         let queued = state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         assert!(matches!(
             queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 0
+                wide: 0,
+                ..
             })
         ));
 
         let paired = state
-            .enter_quick_play(second, "second".to_string(), false, 1)
+            .enter_quick_play(second, "second".to_string(), false, 1, String::new())
             .await;
         let QuickPlayOutcome::Paired {
             lobby,
@@ -518,7 +541,7 @@ mod tests {
         assert!(state.get_lobbies(first).await.is_empty());
 
         let seated = state
-            .enter_quick_play(third, "third".to_string(), false, 1)
+            .enter_quick_play(third, "third".to_string(), false, 1, String::new())
             .await;
         let QuickPlayOutcome::Seated { lobby, .. } = seated else {
             panic!("expected a seat in the open lobby");
@@ -534,10 +557,10 @@ mod tests {
         let state = state_with_clients(&[first, second]).await;
 
         state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         state
-            .enter_quick_play(second, "second".to_string(), false, 1)
+            .enter_quick_play(second, "second".to_string(), false, 1, String::new())
             .await;
 
         state
@@ -562,30 +585,31 @@ mod tests {
         let state = state_with_clients(&[first, second]).await;
 
         state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         let requeued = state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         assert!(matches!(
             requeued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 0
+                wide: 0,
+                ..
             })
         ));
 
         assert_eq!(state.exit_quick_play(first).await, QueueCounts::default());
 
         state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         state
-            .enter_quick_play(second, "second".to_string(), false, 1)
+            .enter_quick_play(second, "second".to_string(), false, 1, String::new())
             .await;
 
         let in_lobby = state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         assert!(matches!(in_lobby, QuickPlayOutcome::Failed { .. }));
     }
@@ -598,29 +622,31 @@ mod tests {
         let state = state_with_clients(&[first, second, third]).await;
 
         let queued = state
-            .enter_quick_play(first, "first".to_string(), true, 1)
+            .enter_quick_play(first, "first".to_string(), true, 1, String::new())
             .await;
         assert!(matches!(
             queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 0,
-                wide: 1
+                wide: 1,
+                ..
             })
         ));
 
         let still_queued = state
-            .enter_quick_play(second, "second".to_string(), false, 1)
+            .enter_quick_play(second, "second".to_string(), false, 1, String::new())
             .await;
         assert!(matches!(
             still_queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 1
+                wide: 1,
+                ..
             })
         ));
 
         let paired = state
-            .enter_quick_play(third, "third".to_string(), true, 1)
+            .enter_quick_play(third, "third".to_string(), true, 1, String::new())
             .await;
         let QuickPlayOutcome::Paired {
             lobby,
@@ -637,16 +663,77 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn quick_play_matches_compatible_game_logic_speeds() {
+        let first = test_addr(1);
+        let second = test_addr(2);
+        let third = test_addr(3);
+        let fourth = test_addr(4);
+        let state = state_with_clients(&[first, second, third, fourth]).await;
+
+        state
+            .enter_quick_play(first, "first".to_string(), false, 1, "Hz60".to_string())
+            .await;
+        let still_queued = state
+            .enter_quick_play(second, "second".to_string(), false, 1, "Hz240".to_string())
+            .await;
+        assert!(matches!(
+            still_queued,
+            QuickPlayOutcome::Queued(QueueCounts {
+                standard: 2,
+                hz60: 1,
+                hz240: 1,
+                ..
+            })
+        ));
+
+        let paired = state
+            .enter_quick_play(third, "third".to_string(), false, 1, "Best".to_string())
+            .await;
+        let QuickPlayOutcome::Paired {
+            lobby,
+            partner_addr,
+            ..
+        } = paired
+        else {
+            panic!("expected BEST to pair");
+        };
+        assert_eq!(partner_addr, first.to_string());
+        assert_eq!(lobby.fixed_tick_rate(), Some(60));
+
+        let paired = state
+            .enter_quick_play(fourth, "fourth".to_string(), false, 1, "Hz240".to_string())
+            .await;
+        let QuickPlayOutcome::Paired {
+            lobby: other_lobby,
+            partner_addr,
+            ..
+        } = paired
+        else {
+            panic!("expected the 240 HZ players to pair");
+        };
+        assert_eq!(partner_addr, second.to_string());
+        assert_ne!(other_lobby.room_id(), lobby.room_id());
+    }
+
+    #[test]
+    fn game_logic_speeds() {
+        assert!(lobby::game_logic_speeds_compatible("Best", "Hz60"));
+        assert!(lobby::game_logic_speeds_compatible("Hz240", ""));
+        assert!(!lobby::game_logic_speeds_compatible("Hz60", "Hz240"));
+        assert!(!lobby::game_logic_speeds_compatible("Hz60", ""));
+    }
+
+    #[tokio::test]
     async fn quick_play_auto_starts_after_grace() {
         let first = test_addr(1);
         let second = test_addr(2);
         let state = state_with_clients(&[first, second]).await;
 
         state
-            .enter_quick_play(first, "first".to_string(), false, 1)
+            .enter_quick_play(first, "first".to_string(), false, 1, String::new())
             .await;
         state
-            .enter_quick_play(second, "second".to_string(), false, 1)
+            .enter_quick_play(second, "second".to_string(), false, 1, String::new())
             .await;
 
         state.quick_play_tick().await;
@@ -696,22 +783,23 @@ mod tests {
         let state = state_with_clients(&[trio, duo, solo]).await;
 
         state
-            .enter_quick_play(trio, "trio".to_string(), false, 3)
+            .enter_quick_play(trio, "trio".to_string(), false, 3, String::new())
             .await;
 
         let still_queued = state
-            .enter_quick_play(duo, "duo".to_string(), false, 2)
+            .enter_quick_play(duo, "duo".to_string(), false, 2, String::new())
             .await;
         assert!(matches!(
             still_queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 2,
-                wide: 0
+                wide: 0,
+                ..
             })
         ));
 
         let paired = state
-            .enter_quick_play(solo, "solo".to_string(), false, 1)
+            .enter_quick_play(solo, "solo".to_string(), false, 1, String::new())
             .await;
         let QuickPlayOutcome::Paired {
             lobby,

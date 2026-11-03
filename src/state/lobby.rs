@@ -120,6 +120,19 @@ pub struct Lobby {
 }
 
 impl Lobby {
+    pub fn fixed_tick_rate(&self) -> Option<u32> {
+        self.players
+            .iter()
+            .find_map(|player| fixed_tick_rate(&player.game_logic_speed))
+    }
+
+    pub fn accepts_game_logic_speed(&self, game_logic_speed: &str) -> bool {
+        match (fixed_tick_rate(game_logic_speed), self.fixed_tick_rate()) {
+            (Some(rate), Some(fixed)) => rate == fixed,
+            _ => true,
+        }
+    }
+
     pub fn name(&self) -> String {
         self.name.clone()
     }
@@ -753,10 +766,28 @@ pub struct Player {
     input_delay: Option<i32>,
     #[serde(default)]
     local_index: usize,
+    #[serde(default)]
+    game_logic_speed: String,
 }
 
 pub fn is_valid_local_players(local_players: usize) -> bool {
     (1..=MAX_LOCAL_PLAYERS).contains(&local_players)
+}
+
+/// The rate a game logic speed requires: none for "Best"; an empty one is a client from before the setting, which only plays 240
+pub fn fixed_tick_rate(game_logic_speed: &str) -> Option<u32> {
+    match game_logic_speed {
+        "Best" => None,
+        "Hz60" => Some(60),
+        _ => Some(240),
+    }
+}
+
+pub fn game_logic_speeds_compatible(a: &str, b: &str) -> bool {
+    match (fixed_tick_rate(a), fixed_tick_rate(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => true,
+    }
 }
 
 fn neutral_team() -> i32 {
@@ -784,7 +815,12 @@ impl Player {
             platform: String::new(),
             input_delay: None,
             local_index: 0,
+            game_logic_speed: String::new(),
         }
+    }
+
+    pub fn set_game_logic_speed(&mut self, game_logic_speed: String) {
+        self.game_logic_speed = game_logic_speed;
     }
 
     pub fn seat(&self) -> usize {
@@ -812,6 +848,7 @@ impl Player {
         guest.use_instant_replay = owner.use_instant_replay;
         guest.have_modified_game_files = owner.have_modified_game_files;
         guest.platform = owner.platform.clone();
+        guest.game_logic_speed = owner.game_logic_speed.clone();
 
         guest
     }

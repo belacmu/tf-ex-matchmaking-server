@@ -50,6 +50,8 @@ impl AppState {
                 queued: false,
                 searching_standard: 0,
                 searching_wide: 0,
+                searching_hz60: 0,
+                searching_hz240: 0,
                 message: SERVER_UPDATED_MESSAGE.to_string(),
             },
         )
@@ -239,7 +241,14 @@ mod tests {
             .await
             .unwrap();
         state
-            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap();
 
@@ -271,7 +280,7 @@ mod tests {
             SERVER_UPDATED_MESSAGE
         );
         assert!(matches!(
-            state.enter_quick_play(host, "tester".to_string(), false, 1).await,
+            state.enter_quick_play(host, "tester".to_string(), false, 1, String::new()).await,
             QuickPlayOutcome::Failed { message } if message == SERVER_UPDATED_MESSAGE
         ));
     }
@@ -284,7 +293,7 @@ mod tests {
 
         assert!(matches!(
             state
-                .enter_quick_play(player, "tester".to_string(), false, 1)
+                .enter_quick_play(player, "tester".to_string(), false, 1, String::new())
                 .await,
             QuickPlayOutcome::Queued(_)
         ));
@@ -361,7 +370,14 @@ mod tests {
             .await
             .unwrap();
         state
-            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap();
         state.lobbies.lock().await[0].start_series().unwrap();

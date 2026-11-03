@@ -540,6 +540,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
+        game_logic_speed: String,
     ) -> Result<(Lobby, String), String> {
         if self.is_draining() {
             return Err(SERVER_UPDATED_MESSAGE.to_string());
@@ -559,7 +560,14 @@ impl AppState {
         }
 
         let room_peer_id = self
-            .seat_member(lobby, addr, name, is_player, local_players)
+            .seat_member(
+                lobby,
+                addr,
+                name,
+                is_player,
+                local_players,
+                game_logic_speed,
+            )
             .await?;
 
         Ok((lobby.clone(), room_peer_id))
@@ -572,6 +580,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
+        game_logic_speed: String,
     ) -> Result<(Lobby, String), String> {
         if self.is_draining() {
             return Err(SERVER_UPDATED_MESSAGE.to_string());
@@ -616,7 +625,14 @@ impl AppState {
             })?;
 
         let room_peer_id = self
-            .seat_member(lobby, addr, name, is_player, local_players)
+            .seat_member(
+                lobby,
+                addr,
+                name,
+                is_player,
+                local_players,
+                game_logic_speed,
+            )
             .await?;
 
         Ok((lobby.clone(), room_peer_id))
@@ -641,6 +657,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
+        game_logic_speed: String,
     ) -> Result<String, String> {
         let room_id = lobby.room_id();
 
@@ -659,6 +676,14 @@ impl AppState {
 
             if lobby.series_in_progress() {
                 return Err(format!("Lobby {} has a series running", room_id));
+            }
+
+            if !lobby.accepts_game_logic_speed(&game_logic_speed) {
+                return Err(format!(
+                    "Lobby {} needs {} Hz",
+                    room_id,
+                    lobby.fixed_tick_rate().unwrap_or(240)
+                ));
             }
         }
 
@@ -682,12 +707,13 @@ impl AppState {
             .peer_id(room_id)
             .ok_or("Couldn't retrieve Room peer id")?;
 
-        let member = Player::new(
+        let mut member = Player::new(
             client.name.clone(),
             addr.to_string(),
             room_peer_id.clone(),
             false,
         );
+        member.set_game_logic_speed(game_logic_speed);
 
         if is_player {
             lobby.add_player_device(member, local_players);
@@ -1101,13 +1127,27 @@ mod tests {
         let code = created.join_code().unwrap();
 
         let err = state
-            .join_private("NOPE".to_string(), joiner, "guest".to_string(), true, 1)
+            .join_private(
+                "NOPE".to_string(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(err, "Invalid or expired code");
 
         let throttled = state
-            .join_private(code.clone(), joiner, "guest".to_string(), true, 1)
+            .join_private(
+                code.clone(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(throttled, "Too many attempts, wait a moment");
@@ -1121,7 +1161,7 @@ mod tests {
 
         let sloppy = format!(" {} ", code.to_lowercase());
         let (lobby, room_peer_id) = state
-            .join_private(sloppy, joiner, "guest".to_string(), true, 1)
+            .join_private(sloppy, joiner, "guest".to_string(), true, 1, String::new())
             .await
             .unwrap();
 
@@ -1142,7 +1182,14 @@ mod tests {
         state.lobbies.lock().await[0].set_in_game(true);
 
         let err = state
-            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(err, "Lobby room-1 already started");
@@ -1154,6 +1201,7 @@ mod tests {
                 "watcher".to_string(),
                 false,
                 1,
+                String::new(),
             )
             .await
             .unwrap();
@@ -1205,7 +1253,14 @@ mod tests {
         assert!(state.get_lobbies(joiner).await.is_empty());
 
         let not_live = state
-            .join_lobby(room_id.clone(), watcher, "watcher".to_string(), false, 1)
+            .join_lobby(
+                room_id.clone(),
+                watcher,
+                "watcher".to_string(),
+                false,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(not_live, "Ranked matches can only be spectated");
@@ -1214,13 +1269,27 @@ mod tests {
         assert_eq!(state.get_lobbies(joiner).await.len(), 1);
 
         let as_player = state
-            .join_lobby(room_id.clone(), joiner, "joiner".to_string(), true, 1)
+            .join_lobby(
+                room_id.clone(),
+                joiner,
+                "joiner".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(as_player, "Ranked matches can only be spectated");
 
         let (lobby, _) = state
-            .join_lobby(room_id, watcher, "watcher".to_string(), false, 1)
+            .join_lobby(
+                room_id,
+                watcher,
+                "watcher".to_string(),
+                false,
+                1,
+                String::new(),
+            )
             .await
             .unwrap();
         assert_eq!(lobby.spectators().len(), 1);
@@ -1235,7 +1304,14 @@ mod tests {
         let mut payload = lobby_payload(LobbyKind::Standard, "room-1");
         state.add_lobby(&mut payload, host, 1).await.unwrap();
         state
-            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                joiner,
+                "guest".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap();
 
@@ -1320,26 +1396,54 @@ mod tests {
         state.add_lobby(&mut payload, host, 2).await.unwrap();
 
         let err = state
-            .join_lobby("room-1".to_string(), duo, "duo".to_string(), true, 3)
+            .join_lobby(
+                "room-1".to_string(),
+                duo,
+                "duo".to_string(),
+                true,
+                3,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(err, "Lobby room-1 is full");
 
         let (lobby, _) = state
-            .join_lobby("room-1".to_string(), duo, "duo".to_string(), true, 2)
+            .join_lobby(
+                "room-1".to_string(),
+                duo,
+                "duo".to_string(),
+                true,
+                2,
+                String::new(),
+            )
             .await
             .unwrap();
         assert_eq!(lobby.players().len(), 4);
         assert_eq!(lobby.peer_count(), 2);
 
         let err = state
-            .join_lobby("room-1".to_string(), late, "late".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                late,
+                "late".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap_err();
         assert_eq!(err, "Lobby room-1 is full");
 
         let (lobby, _) = state
-            .join_lobby("room-1".to_string(), late, "late".to_string(), false, 3)
+            .join_lobby(
+                "room-1".to_string(),
+                late,
+                "late".to_string(),
+                false,
+                3,
+                String::new(),
+            )
             .await
             .unwrap();
         assert_eq!(lobby.spectators().len(), 1);
@@ -1423,7 +1527,14 @@ mod tests {
         let mut payload = lobby_payload(LobbyKind::Standard, "room-1");
         state.add_lobby(&mut payload, host, 2).await.unwrap();
         state
-            .join_lobby("room-1".to_string(), joiner, "joiner".to_string(), true, 1)
+            .join_lobby(
+                "room-1".to_string(),
+                joiner,
+                "joiner".to_string(),
+                true,
+                1,
+                String::new(),
+            )
             .await
             .unwrap();
         state.lobbies.lock().await[0].set_in_game(true);

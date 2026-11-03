@@ -318,6 +318,7 @@ pub async fn handle_socket(
                         name,
                         is_player,
                         local_players,
+                        game_logic_speed,
                     } => {
                         info!("{who} wants to join lobby {room_id}, is a player {is_player}");
 
@@ -331,7 +332,14 @@ pub async fn handle_socket(
                             .await;
 
                         match cloned_state_recv
-                            .join_lobby(room_id.clone(), ip, name, is_player, local_players)
+                            .join_lobby(
+                                room_id.clone(),
+                                ip,
+                                name,
+                                is_player,
+                                local_players,
+                                game_logic_speed,
+                            )
                             .await
                         {
                             Ok((lobby, room_peer_id)) => {
@@ -379,8 +387,9 @@ pub async fn handle_socket(
                         name,
                         is_wide,
                         local_players,
+                        game_logic_speed,
                     } => {
-                        info!("{who} entered the quickplay queue (wide: {is_wide}, local players: {local_players})");
+                        info!("{who} entered the quickplay queue (wide: {is_wide}, local players: {local_players}, speed: {game_logic_speed})");
 
                         cloned_state_recv
                             .ranking()
@@ -389,7 +398,7 @@ pub async fn handle_socket(
                         cloned_state_recv.leave_stale_lobbies(ip, None).await;
 
                         let outcome = cloned_state_recv
-                            .enter_quick_play(ip, name, is_wide, local_players)
+                            .enter_quick_play(ip, name, is_wide, local_players, game_logic_speed)
                             .await;
 
                         let outcome_label = match &outcome {
@@ -408,6 +417,8 @@ pub async fn handle_socket(
                                         queued: true,
                                         searching_standard: counts.standard,
                                         searching_wide: counts.wide,
+                                        searching_hz60: counts.hz60,
+                                        searching_hz240: counts.hz240,
                                         message: "".to_string(),
                                     }))
                                     .await
@@ -476,6 +487,8 @@ pub async fn handle_socket(
                                         queued: false,
                                         searching_standard: 0,
                                         searching_wide: 0,
+                                        searching_hz60: 0,
+                                        searching_hz240: 0,
                                         message,
                                     }))
                                     .await
@@ -493,6 +506,8 @@ pub async fn handle_socket(
                                 queued: false,
                                 searching_standard: counts.standard,
                                 searching_wide: counts.wide,
+                                searching_hz60: counts.hz60,
+                                searching_hz240: counts.hz240,
                                 message: "".to_string(),
                             }))
                             .await
@@ -558,6 +573,7 @@ pub async fn handle_socket(
                         name,
                         is_player,
                         local_players,
+                        game_logic_speed,
                     } => {
                         info!(
                             "{who} wants to join a private lobby by code, is a player {is_player}"
@@ -571,7 +587,14 @@ pub async fn handle_socket(
                         cloned_state_recv.leave_stale_lobbies(ip, None).await;
 
                         match cloned_state_recv
-                            .join_private(code, ip, name, is_player, local_players)
+                            .join_private(
+                                code,
+                                ip,
+                                name,
+                                is_player,
+                                local_players,
+                                game_logic_speed,
+                            )
                             .await
                         {
                             Ok((lobby, room_peer_id)) => {

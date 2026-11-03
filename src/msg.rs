@@ -52,6 +52,8 @@ pub enum ServerMsg {
         queued: bool,
         searching_standard: u32,
         searching_wide: u32,
+        searching_hz60: u32,
+        searching_hz240: u32,
         message: String,
     },
     QuickPlayMatchFound {
@@ -150,6 +152,8 @@ pub enum ClientMsg {
         is_player: bool,
         #[serde(default = "default_local_player")]
         local_players: usize,
+        #[serde(default)]
+        game_logic_speed: String,
     },
     UpdatePlayer {
         player: Player,
@@ -190,6 +194,8 @@ pub enum ClientMsg {
         is_player: bool,
         #[serde(default = "default_local_player")]
         local_players: usize,
+        #[serde(default)]
+        game_logic_speed: String,
     },
     EnterQuickPlay {
         name: String,
@@ -197,6 +203,8 @@ pub enum ClientMsg {
         is_wide: bool,
         #[serde(default = "default_local_player")]
         local_players: usize,
+        #[serde(default)]
+        game_logic_speed: String,
     },
     ExitQuickPlay {},
     EnterRanked {
