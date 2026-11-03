@@ -1386,6 +1386,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn join_needs_a_compatible_game_logic_speed() {
+        let host = test_addr(1);
+        let slow = test_addr(2);
+        let watcher = test_addr(3);
+        let best = test_addr(4);
+        let state = state_with_clients(&[host, slow, watcher, best]).await;
+
+        let mut payload = lobby_payload(LobbyKind::Standard, "room-1");
+        state.add_lobby(&mut payload, host, 1).await.unwrap();
+
+        let err = state
+            .join_lobby(
+                "room-1".to_string(),
+                slow,
+                "slow".to_string(),
+                true,
+                1,
+                "Hz60".to_string(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err, "Lobby room-1 needs 240 Hz");
+
+        assert!(state
+            .join_lobby(
+                "room-1".to_string(),
+                watcher,
+                "watcher".to_string(),
+                false,
+                1,
+                "Hz60".to_string(),
+            )
+            .await
+            .is_ok());
+
+        let (lobby, _) = state
+            .join_lobby(
+                "room-1".to_string(),
+                best,
+                "best".to_string(),
+                true,
+                1,
+                "Best".to_string(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(lobby.fixed_tick_rate(), Some(240));
+    }
+
+    #[tokio::test]
     async fn join_needs_a_free_seat_per_local_player() {
         let host = test_addr(1);
         let duo = test_addr(2);
