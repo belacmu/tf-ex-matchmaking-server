@@ -50,8 +50,6 @@ impl AppState {
                 queued: false,
                 searching_standard: 0,
                 searching_wide: 0,
-                searching_hz60: 0,
-                searching_hz240: 0,
                 message: SERVER_UPDATED_MESSAGE.to_string(),
             },
         )
@@ -247,7 +245,7 @@ mod tests {
                 "guest".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap();
@@ -280,7 +278,7 @@ mod tests {
             SERVER_UPDATED_MESSAGE
         );
         assert!(matches!(
-            state.enter_quick_play(host, "tester".to_string(), false, 1, String::new()).await,
+            state.enter_quick_play(host, "tester".to_string(), false, 1, None).await,
             QuickPlayOutcome::Failed { message } if message == SERVER_UPDATED_MESSAGE
         ));
     }
@@ -293,7 +291,7 @@ mod tests {
 
         assert!(matches!(
             state
-                .enter_quick_play(player, "tester".to_string(), false, 1, String::new())
+                .enter_quick_play(player, "tester".to_string(), false, 1, None)
                 .await,
             QuickPlayOutcome::Queued(_)
         ));
@@ -376,7 +374,7 @@ mod tests {
                 "guest".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap();

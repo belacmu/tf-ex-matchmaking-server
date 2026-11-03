@@ -7,36 +7,21 @@ use super::quickplay::QuickplayQueued;
 pub trait QueueEntry {
     fn addr(&self) -> SocketAddr;
     fn is_wide(&self) -> bool;
-
-    fn fixed_tick_rate(&self) -> Option<u32> {
-        None
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct QueueCounts {
     pub standard: u32,
     pub wide: u32,
-    pub hz60: u32,
-    pub hz240: u32,
 }
 
 impl QueueCounts {
     pub fn of<T: QueueEntry>(entries: &[T]) -> Self {
         let wide = entries.iter().filter(|entry| entry.is_wide()).count() as u32;
 
-        let at = |rate| {
-            entries
-                .iter()
-                .filter(|entry| entry.fixed_tick_rate() == Some(rate))
-                .count() as u32
-        };
-
         Self {
             standard: entries.len() as u32 - wide,
             wide,
-            hz60: at(60),
-            hz240: at(240),
         }
     }
 }

@@ -389,7 +389,7 @@ pub async fn handle_socket(
                         local_players,
                         game_logic_speed,
                     } => {
-                        info!("{who} entered the quickplay queue (wide: {is_wide}, local players: {local_players}, speed: {game_logic_speed})");
+                        info!("{who} entered the quickplay queue (wide: {is_wide}, local players: {local_players}, speed: {game_logic_speed:?})");
 
                         cloned_state_recv
                             .ranking()
@@ -417,8 +417,6 @@ pub async fn handle_socket(
                                         queued: true,
                                         searching_standard: counts.standard,
                                         searching_wide: counts.wide,
-                                        searching_hz60: counts.hz60,
-                                        searching_hz240: counts.hz240,
                                         message: "".to_string(),
                                     }))
                                     .await
@@ -487,8 +485,6 @@ pub async fn handle_socket(
                                         queued: false,
                                         searching_standard: 0,
                                         searching_wide: 0,
-                                        searching_hz60: 0,
-                                        searching_hz240: 0,
                                         message,
                                     }))
                                     .await
@@ -506,8 +502,6 @@ pub async fn handle_socket(
                                 queued: false,
                                 searching_standard: counts.standard,
                                 searching_wide: counts.wide,
-                                searching_hz60: counts.hz60,
-                                searching_hz240: counts.hz240,
                                 message: "".to_string(),
                             }))
                             .await

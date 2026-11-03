@@ -41,7 +41,7 @@ use crate::{
 
 use self::{
     client::{Client, Room},
-    lobby::{is_valid_local_players, Departure, GameData, Lobby, Mod, Player},
+    lobby::{is_valid_local_players, Departure, GameData, GameLogicSpeed, Lobby, Mod, Player},
     series::SeriesStatus,
     signaling_state::SignalingState,
 };
@@ -540,7 +540,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     ) -> Result<(Lobby, String), String> {
         if self.is_draining() {
             return Err(SERVER_UPDATED_MESSAGE.to_string());
@@ -580,7 +580,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     ) -> Result<(Lobby, String), String> {
         if self.is_draining() {
             return Err(SERVER_UPDATED_MESSAGE.to_string());
@@ -657,7 +657,7 @@ impl AppState {
         name: String,
         is_player: bool,
         local_players: usize,
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     ) -> Result<String, String> {
         let room_id = lobby.room_id();
 
@@ -678,12 +678,13 @@ impl AppState {
                 return Err(format!("Lobby {} has a series running", room_id));
             }
 
-            if !lobby.accepts_game_logic_speed(&game_logic_speed) {
-                return Err(format!(
-                    "Lobby {} needs {} Hz",
-                    room_id,
-                    lobby.fixed_tick_rate().unwrap_or(240)
-                ));
+            if let (Some(rate), Some(fixed)) = (
+                GameLogicSpeed::fixed_tick_rate(game_logic_speed),
+                lobby.fixed_tick_rate(),
+            ) {
+                if rate != fixed {
+                    return Err(format!("Lobby {} needs {} Hz", room_id, fixed));
+                }
             }
         }
 
@@ -1133,21 +1134,14 @@ mod tests {
                 "guest".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap_err();
         assert_eq!(err, "Invalid or expired code");
 
         let throttled = state
-            .join_private(
-                code.clone(),
-                joiner,
-                "guest".to_string(),
-                true,
-                1,
-                String::new(),
-            )
+            .join_private(code.clone(), joiner, "guest".to_string(), true, 1, None)
             .await
             .unwrap_err();
         assert_eq!(throttled, "Too many attempts, wait a moment");
@@ -1161,7 +1155,7 @@ mod tests {
 
         let sloppy = format!(" {} ", code.to_lowercase());
         let (lobby, room_peer_id) = state
-            .join_private(sloppy, joiner, "guest".to_string(), true, 1, String::new())
+            .join_private(sloppy, joiner, "guest".to_string(), true, 1, None)
             .await
             .unwrap();
 
@@ -1188,7 +1182,7 @@ mod tests {
                 "guest".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap_err();
@@ -1201,7 +1195,7 @@ mod tests {
                 "watcher".to_string(),
                 false,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap();
@@ -1259,7 +1253,7 @@ mod tests {
                 "watcher".to_string(),
                 false,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap_err();
@@ -1269,27 +1263,13 @@ mod tests {
         assert_eq!(state.get_lobbies(joiner).await.len(), 1);
 
         let as_player = state
-            .join_lobby(
-                room_id.clone(),
-                joiner,
-                "joiner".to_string(),
-                true,
-                1,
-                String::new(),
-            )
+            .join_lobby(room_id.clone(), joiner, "joiner".to_string(), true, 1, None)
             .await
             .unwrap_err();
         assert_eq!(as_player, "Ranked matches can only be spectated");
 
         let (lobby, _) = state
-            .join_lobby(
-                room_id,
-                watcher,
-                "watcher".to_string(),
-                false,
-                1,
-                String::new(),
-            )
+            .join_lobby(room_id, watcher, "watcher".to_string(), false, 1, None)
             .await
             .unwrap();
         assert_eq!(lobby.spectators().len(), 1);
@@ -1310,7 +1290,7 @@ mod tests {
                 "guest".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap();
@@ -1403,7 +1383,7 @@ mod tests {
                 "slow".to_string(),
                 true,
                 1,
-                "Hz60".to_string(),
+                Some(GameLogicSpeed::Hz60),
             )
             .await
             .unwrap_err();
@@ -1416,7 +1396,7 @@ mod tests {
                 "watcher".to_string(),
                 false,
                 1,
-                "Hz60".to_string(),
+                Some(GameLogicSpeed::Hz60),
             )
             .await
             .is_ok());
@@ -1428,11 +1408,20 @@ mod tests {
                 "best".to_string(),
                 true,
                 1,
-                "Best".to_string(),
+                Some(GameLogicSpeed::Best),
             )
             .await
             .unwrap();
         assert_eq!(lobby.fixed_tick_rate(), Some(240));
+
+        let mut lobby = lobby;
+        let mut changed = lobby.players()[1].clone();
+        changed.set_game_logic_speed(Some(GameLogicSpeed::Hz60));
+        lobby.update_player(&best.to_string(), changed);
+        assert_eq!(
+            lobby.players()[1].game_logic_speed(),
+            Some(GameLogicSpeed::Best)
+        );
     }
 
     #[tokio::test]
@@ -1446,27 +1435,13 @@ mod tests {
         state.add_lobby(&mut payload, host, 2).await.unwrap();
 
         let err = state
-            .join_lobby(
-                "room-1".to_string(),
-                duo,
-                "duo".to_string(),
-                true,
-                3,
-                String::new(),
-            )
+            .join_lobby("room-1".to_string(), duo, "duo".to_string(), true, 3, None)
             .await
             .unwrap_err();
         assert_eq!(err, "Lobby room-1 is full");
 
         let (lobby, _) = state
-            .join_lobby(
-                "room-1".to_string(),
-                duo,
-                "duo".to_string(),
-                true,
-                2,
-                String::new(),
-            )
+            .join_lobby("room-1".to_string(), duo, "duo".to_string(), true, 2, None)
             .await
             .unwrap();
         assert_eq!(lobby.players().len(), 4);
@@ -1479,7 +1454,7 @@ mod tests {
                 "late".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap_err();
@@ -1492,7 +1467,7 @@ mod tests {
                 "late".to_string(),
                 false,
                 3,
-                String::new(),
+                None,
             )
             .await
             .unwrap();
@@ -1583,7 +1558,7 @@ mod tests {
                 "joiner".to_string(),
                 true,
                 1,
-                String::new(),
+                None,
             )
             .await
             .unwrap();

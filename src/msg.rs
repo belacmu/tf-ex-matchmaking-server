@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::lobby::{GameData, Lobby, Mod, Player};
+use crate::state::lobby::{GameData, GameLogicSpeed, Lobby, Mod, Player};
 
 #[derive(Debug, Serialize, Clone)]
 pub enum ServerMsg {
@@ -52,8 +52,6 @@ pub enum ServerMsg {
         queued: bool,
         searching_standard: u32,
         searching_wide: u32,
-        searching_hz60: u32,
-        searching_hz240: u32,
         message: String,
     },
     QuickPlayMatchFound {
@@ -153,7 +151,7 @@ pub enum ClientMsg {
         #[serde(default = "default_local_player")]
         local_players: usize,
         #[serde(default)]
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     },
     UpdatePlayer {
         player: Player,
@@ -195,7 +193,7 @@ pub enum ClientMsg {
         #[serde(default = "default_local_player")]
         local_players: usize,
         #[serde(default)]
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     },
     EnterQuickPlay {
         name: String,
@@ -204,7 +202,7 @@ pub enum ClientMsg {
         #[serde(default = "default_local_player")]
         local_players: usize,
         #[serde(default)]
-        game_logic_speed: String,
+        game_logic_speed: Option<GameLogicSpeed>,
     },
     ExitQuickPlay {},
     EnterRanked {
