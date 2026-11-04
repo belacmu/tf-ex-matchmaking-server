@@ -41,15 +41,8 @@ impl QueueEntry for QuickplayQueued {
     }
 }
 
-/// WiderSet changes level geometry, so wide and standard players can never match
 fn lobby_is_wide(lobby: &Lobby) -> bool {
-    lobby.mods().iter().any(|m| {
-        m.name() == WIDER_SET_MOD_NAME
-            && m.data()
-                .get("IsWide")
-                .map(|value| value.eq_ignore_ascii_case("true"))
-                .unwrap_or(false)
-    })
+    lobby.is_wide()
 }
 
 #[derive(Debug)]
@@ -98,7 +91,7 @@ impl AppState {
             };
         }
 
-        if !is_valid_local_players(local_players) {
+        if !is_valid_local_players(local_players, MAX_PLAYERS) {   // quick play's lobbies are standard size
             return QuickPlayOutcome::Failed {
                 message: "Invalid local player count".to_string(),
             };
