@@ -468,7 +468,7 @@ impl AppState {
             return Err("Ranked lobbies are automated".to_string());
         }
 
-        if !is_valid_local_players(local_players) {
+        if !is_valid_local_players(local_players, lobby.seat_cap()) {
             return Err("Invalid local player count".to_string());
         }
 
@@ -662,7 +662,7 @@ impl AppState {
         let room_id = lobby.room_id();
 
         if is_player {
-            if !is_valid_local_players(local_players) {
+            if !is_valid_local_players(local_players, lobby.seat_cap()) {
                 return Err("Invalid local player count".to_string());
             }
 
@@ -1101,6 +1101,15 @@ pub mod test_support {
 mod tests {
     use super::test_support::*;
     use super::*;
+
+    #[test]
+    fn a_device_leaves_a_seat_for_someone_else() {
+        assert!(is_valid_local_players(3, crate::constants::MAX_PLAYERS));
+        assert!(!is_valid_local_players(4, crate::constants::MAX_PLAYERS));
+        assert!(!is_valid_local_players(0, crate::constants::MAX_PLAYERS));
+        assert!(is_valid_local_players(7, 8));
+        assert!(!is_valid_local_players(8, 8));
+    }
 
     #[tokio::test]
     async fn private_lobby_gets_code_and_hides_from_browser() {

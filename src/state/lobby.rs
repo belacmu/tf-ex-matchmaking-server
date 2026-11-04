@@ -5,7 +5,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::constants::{MAX_LOCAL_PLAYERS, MAX_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE};
+use crate::constants::{MAX_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE};
 use crate::services::geoip::Location;
 use crate::state::connectivity::{peers_of, Connectivity, ConnectivityUpdate, PeerPair};
 use crate::state::series::Series;
@@ -578,7 +578,7 @@ impl Lobby {
     }
 
     fn first_free_seat(&self) -> usize {
-        (0..MAX_PLAYERS)
+        (0..self.seat_cap())
             .find(|seat| !self.players.iter().any(|p| p.seat == *seat))
             .unwrap_or(self.players.len())
     }
@@ -607,10 +607,10 @@ impl Lobby {
     pub fn update_settings(&mut self, max_players: usize, game_data: GameData, mods: Vec<Mod>) {
         let seed = self.game_data.seed;
 
-        self.max_players = max_players.clamp(self.min_max_players(), MAX_PLAYERS);
         self.game_data = game_data;
         self.game_data.seed = seed;
         self.mods = mods;
+        self.max_players = max_players.clamp(self.min_max_players(), self.seat_cap());
         self.series = None;
 
         self.unready_all();
@@ -688,7 +688,38 @@ impl Lobby {
     }
 
     pub fn max_players(&self) -> usize {
-        self.max_players.clamp(2, MAX_PLAYERS)
+        self.max_players.clamp(2, self.seat_cap())
+    }
+
+    /// WiderSet changes level geometry, so wide and standard players can never match
+    pub fn is_wide(&self) -> bool {
+        self.wide_seats().is_some()
+    }
+
+    /// A wide lobby's seats: its WiderSet entry's Seats (the host game's TFGame.Players.Length), at least the standard size;
+    /// None when the lobby isn't wide
+    fn wide_seats(&self) -> Option<usize> {
+        self.mods
+            .iter()
+            .find(|m| {
+                m.name() == crate::state::WIDER_SET_MOD_NAME
+                    && m.data()
+                        .get("IsWide")
+                        .map(|value| value.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false)
+            })
+            .map(|m| {
+                m.data()
+                    .get("Seats")
+                    .and_then(|seats| seats.parse::<usize>().ok())
+                    .unwrap_or(MAX_PLAYERS)
+                    .max(MAX_PLAYERS)
+            })
+    }
+
+    /// The most seats a lobby can have: the game's seats in a wide lobby (WiderSet), 4 otherwise
+    pub fn seat_cap(&self) -> usize {
+        self.wide_seats().unwrap_or(MAX_PLAYERS)
     }
 
     pub fn is_full(&self) -> bool {
@@ -755,8 +786,10 @@ pub struct Player {
     local_index: usize,
 }
 
-pub fn is_valid_local_players(local_players: usize) -> bool {
-    (1..=MAX_LOCAL_PLAYERS).contains(&local_players)
+/// One device's players for a lobby of `seat_cap` seats: at least one, and a seat left for someone else
+/// (MAX_LOCAL_PLAYERS in a standard lobby, the wide seats minus one in a wide one)
+pub fn is_valid_local_players(local_players: usize, seat_cap: usize) -> bool {
+    (1..seat_cap).contains(&local_players)
 }
 
 /// A match seed. `TFEX_FIXED_SEED` (tests: scripted inputs that need a known level) gives every match that seed
@@ -905,7 +938,7 @@ impl LobbyBuilder {
     }
 
     pub fn max_players(mut self, max_players: usize) -> Self {
-        self.max_players = Some(max_players.clamp(2, MAX_PLAYERS));
+        self.max_players = Some(max_players.max(2));
         self
     }
 
