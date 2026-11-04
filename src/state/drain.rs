@@ -239,14 +239,7 @@ mod tests {
             .await
             .unwrap();
         state
-            .join_lobby(
-                "room-1".to_string(),
-                joiner,
-                "guest".to_string(),
-                true,
-                1,
-                None,
-            )
+            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
             .await
             .unwrap();
 
@@ -368,14 +361,7 @@ mod tests {
             .await
             .unwrap();
         state
-            .join_lobby(
-                "room-1".to_string(),
-                joiner,
-                "guest".to_string(),
-                true,
-                1,
-                None,
-            )
+            .join_lobby("room-1".to_string(), joiner, "guest".to_string(), true, 1)
             .await
             .unwrap();
         state.lobbies.lock().await[0].start_series().unwrap();

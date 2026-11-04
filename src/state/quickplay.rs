@@ -43,17 +43,6 @@ impl QueueEntry for QuickplayQueued {
 }
 
 /// WiderSet changes level geometry, so wide and standard players can never match
-/// What a queued player sees: only the players they can be paired with
-fn counts_for(queue: &[QuickplayQueued], game_logic_speed: Option<GameLogicSpeed>) -> QueueCounts {
-    let compatible = queue
-        .iter()
-        .filter(|q| GameLogicSpeed::compatible(q.game_logic_speed, game_logic_speed))
-        .cloned()
-        .collect::<Vec<_>>();
-
-    QueueCounts::of(&compatible)
-}
-
 fn lobby_is_wide(lobby: &Lobby) -> bool {
     lobby.mods().iter().any(|m| {
         m.name() == WIDER_SET_MOD_NAME
@@ -200,7 +189,7 @@ impl AppState {
                     queued_at: Instant::now(),
                 });
 
-                return QuickPlayOutcome::Queued(counts_for(&queue, game_logic_speed));
+                return QuickPlayOutcome::Queued(QueueCounts::of(&queue));
             };
 
             partner_client.room = Some(Room::new(room_id.clone()));
@@ -294,7 +283,7 @@ impl AppState {
             queued_at: Instant::now(),
         });
 
-        QuickPlayOutcome::Queued(counts_for(&queue, game_logic_speed))
+        QuickPlayOutcome::Queued(QueueCounts::of(&queue))
     }
 
     pub async fn exit_quick_play(&self, addr: SocketAddr) -> QueueCounts {
@@ -456,27 +445,29 @@ impl AppState {
     }
 
     async fn push_queue_status(&self) {
-        let statuses = {
+        let (addrs, counts) = {
             let queue = self.queues.quick_play.lock().await;
 
-            queue
-                .iter()
-                .map(|q| (q.addr.to_string(), counts_for(&queue, q.game_logic_speed)))
-                .collect::<Vec<_>>()
+            (
+                queue.iter().map(|q| q.addr.to_string()).collect::<Vec<_>>(),
+                QueueCounts::of(&queue),
+            )
         };
 
-        for (addr, counts) in statuses {
-            self.send_msg_to_addrs(
-                &[addr],
-                ServerMsg::QuickPlayStatus {
-                    queued: true,
-                    searching_standard: counts.standard,
-                    searching_wide: counts.wide,
-                    message: "".to_string(),
-                },
-            )
-            .await;
+        if addrs.is_empty() {
+            return;
         }
+
+        self.send_msg_to_addrs(
+            &addrs,
+            ServerMsg::QuickPlayStatus {
+                queued: true,
+                searching_standard: counts.standard,
+                searching_wide: counts.wide,
+                message: "".to_string(),
+            },
+        )
+        .await;
     }
 }
 
@@ -515,8 +506,7 @@ mod tests {
             queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 0,
-                ..
+                wide: 0
             })
         ));
 
@@ -597,8 +587,7 @@ mod tests {
             requeued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 0,
-                ..
+                wide: 0
             })
         ));
 
@@ -631,8 +620,7 @@ mod tests {
             queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 0,
-                wide: 1,
-                ..
+                wide: 1
             })
         ));
 
@@ -643,8 +631,7 @@ mod tests {
             still_queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 1,
-                wide: 1,
-                ..
+                wide: 1
             })
         ));
 
@@ -694,7 +681,7 @@ mod tests {
         assert!(matches!(
             still_queued,
             QuickPlayOutcome::Queued(QueueCounts {
-                standard: 1,
+                standard: 2,
                 wide: 0
             })
         ));
@@ -830,8 +817,7 @@ mod tests {
             still_queued,
             QuickPlayOutcome::Queued(QueueCounts {
                 standard: 2,
-                wide: 0,
-                ..
+                wide: 0
             })
         ));
 

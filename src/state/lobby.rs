@@ -587,7 +587,6 @@ impl Lobby {
             is_host: p.is_host,
             seat: p.seat,
             local_index: p.local_index,
-            game_logic_speed: p.game_logic_speed,
             custom_variants,
             ..player
         };
@@ -830,10 +829,6 @@ impl Player {
             local_index: 0,
             game_logic_speed: None,
         }
-    }
-
-    pub fn game_logic_speed(&self) -> Option<GameLogicSpeed> {
-        self.game_logic_speed
     }
 
     pub fn set_game_logic_speed(&mut self, game_logic_speed: Option<GameLogicSpeed>) {

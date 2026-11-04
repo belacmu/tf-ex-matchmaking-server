@@ -150,8 +150,6 @@ pub enum ClientMsg {
         is_player: bool,
         #[serde(default = "default_local_player")]
         local_players: usize,
-        #[serde(default)]
-        game_logic_speed: Option<GameLogicSpeed>,
     },
     UpdatePlayer {
         player: Player,
@@ -192,8 +190,6 @@ pub enum ClientMsg {
         is_player: bool,
         #[serde(default = "default_local_player")]
         local_players: usize,
-        #[serde(default)]
-        game_logic_speed: Option<GameLogicSpeed>,
     },
     EnterQuickPlay {
         name: String,

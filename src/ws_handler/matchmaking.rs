@@ -318,7 +318,6 @@ pub async fn handle_socket(
                         name,
                         is_player,
                         local_players,
-                        game_logic_speed,
                     } => {
                         info!("{who} wants to join lobby {room_id}, is a player {is_player}");
 
@@ -332,14 +331,7 @@ pub async fn handle_socket(
                             .await;
 
                         match cloned_state_recv
-                            .join_lobby(
-                                room_id.clone(),
-                                ip,
-                                name,
-                                is_player,
-                                local_players,
-                                game_logic_speed,
-                            )
+                            .join_lobby(room_id.clone(), ip, name, is_player, local_players)
                             .await
                         {
                             Ok((lobby, room_peer_id)) => {
@@ -567,7 +559,6 @@ pub async fn handle_socket(
                         name,
                         is_player,
                         local_players,
-                        game_logic_speed,
                     } => {
                         info!(
                             "{who} wants to join a private lobby by code, is a player {is_player}"
@@ -581,14 +572,7 @@ pub async fn handle_socket(
                         cloned_state_recv.leave_stale_lobbies(ip, None).await;
 
                         match cloned_state_recv
-                            .join_private(
-                                code,
-                                ip,
-                                name,
-                                is_player,
-                                local_players,
-                                game_logic_speed,
-                            )
+                            .join_private(code, ip, name, is_player, local_players)
                             .await
                         {
                             Ok((lobby, room_peer_id)) => {
