@@ -339,6 +339,10 @@ impl Lobby {
         self.series.as_ref().is_some_and(|s| s.is_in_progress())
     }
 
+    pub fn is_live(&self) -> bool {
+        self.in_game || self.series_in_progress()
+    }
+
     pub fn all_players_ready(&self) -> bool {
         !self.players.is_empty() && self.players.iter().all(|p| p.ready)
     }

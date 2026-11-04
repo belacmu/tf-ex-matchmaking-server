@@ -7,7 +7,8 @@ pub static KEEP_ALIVE_MAX_MISSED: u8 = 6;
 
 pub const MAX_PLAYERS: usize = 4;
 
-pub const MAX_LOCAL_PLAYERS: usize = 3;
+/// One device's most players: at least one seat for someone else
+pub const MAX_LOCAL_PLAYERS: usize = MAX_PLAYERS - 1;
 
 /// How long players get to pick an end match option before the undecided ones are dropped
 pub static END_GAME_CHOICE_SECONDS: u64 = 30;

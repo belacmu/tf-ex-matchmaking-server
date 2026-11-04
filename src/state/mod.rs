@@ -422,19 +422,32 @@ impl AppState {
     }
 
     pub async fn get_lobbies(&self, _addr: SocketAddr) -> Vec<Lobby> {
-        let mut lobbies: Vec<Lobby> = self
+        let listed: Vec<Lobby> = self
             .lobbies
             .lock()
             .await
             .iter()
             .filter(|l| l.players().iter().any(|p| p.is_host()))
             .filter(|l| match l.kind() {
-                LobbyKind::Standard => !l.is_full() || l.in_game() || l.series_in_progress(),
+                LobbyKind::Standard => !l.is_full() || l.is_live(),
                 LobbyKind::QuickPlay => l.in_game(),
-                LobbyKind::Private | LobbyKind::Ranked => false,
+                LobbyKind::Ranked => l.is_live(),
+                LobbyKind::Private => false,
             })
             .cloned()
             .collect();
+
+        let mut lobbies = Vec::with_capacity(listed.len());
+
+        for lobby in listed {
+            if !self
+                .ranking
+                .is_series_start_held(self, &lobby.room_id())
+                .await
+            {
+                lobbies.push(lobby);
+            }
+        }
 
         lobbies.sort_by_key(|l| l.in_game());
 
@@ -558,8 +571,8 @@ impl AppState {
             .find(|l| l.room_id() == room_id)
             .ok_or(format!("Lobby {} not found", room_id))?;
 
-        if lobby.kind() == LobbyKind::Ranked {
-            return Err("Ranked matches can't be joined".to_string());
+        if lobby.kind() == LobbyKind::Ranked && (is_player || !lobby.is_live()) {
+            return Err("Ranked matches can only be spectated".to_string());
         }
 
         let room_peer_id = self
@@ -1188,6 +1201,54 @@ mod tests {
             .unwrap()
             .set_in_game(true);
         assert_eq!(state.get_lobbies(host).await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn live_ranked_lobby_is_listed_but_can_only_be_spectated() {
+        let host = test_addr(1);
+        let joiner = test_addr(2);
+        let watcher = test_addr(3);
+        let state = state_with_clients(&[host, joiner, watcher]).await;
+        let room_id = "room-ranked".to_string();
+
+        let lobby = LobbyBuilder::new()
+            .name("RANKED".to_string())
+            .room_id(room_id.clone())
+            .max_players(2)
+            .game_data(lobby_payload(LobbyKind::Ranked, &room_id).game_data())
+            .players(vec![Player::new(
+                "host".to_string(),
+                host.to_string(),
+                "peer-1".to_string(),
+                true,
+            )])
+            .kind(LobbyKind::Ranked)
+            .build();
+
+        state.lobbies.lock().await.push(lobby);
+
+        assert!(state.get_lobbies(joiner).await.is_empty());
+
+        let not_live = state
+            .join_lobby(room_id.clone(), watcher, "watcher".to_string(), false, 1)
+            .await
+            .unwrap_err();
+        assert_eq!(not_live, "Ranked matches can only be spectated");
+
+        state.lobbies.lock().await[0].set_in_game(true);
+        assert_eq!(state.get_lobbies(joiner).await.len(), 1);
+
+        let as_player = state
+            .join_lobby(room_id.clone(), joiner, "joiner".to_string(), true, 1)
+            .await
+            .unwrap_err();
+        assert_eq!(as_player, "Ranked matches can only be spectated");
+
+        let (lobby, _) = state
+            .join_lobby(room_id, watcher, "watcher".to_string(), false, 1)
+            .await
+            .unwrap();
+        assert_eq!(lobby.spectators().len(), 1);
     }
 
     #[tokio::test]
