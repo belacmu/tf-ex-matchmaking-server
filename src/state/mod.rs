@@ -423,7 +423,7 @@ impl AppState {
             .iter()
             .filter(|l| l.players().iter().any(|p| p.is_host()))
             .filter(|l| match l.kind() {
-                LobbyKind::Standard => !l.is_full() || l.is_live(),
+                LobbyKind::Standard => (!l.is_full() && l.has_room_for_device()) || l.is_live(),
                 LobbyKind::QuickPlay => l.in_game(),
                 LobbyKind::Ranked => l.is_live(),
                 LobbyKind::Private => false,
@@ -462,7 +462,7 @@ impl AppState {
             return Err("Ranked lobbies are automated".to_string());
         }
 
-        if !is_valid_local_players(local_players) {
+        if !is_valid_local_players(local_players, lobby.seat_cap()) {
             return Err("Invalid local player count".to_string());
         }
 
@@ -645,11 +645,11 @@ impl AppState {
         let room_id = lobby.room_id();
 
         if is_player {
-            if !is_valid_local_players(local_players) {
+            if !is_valid_local_players(local_players, lobby.seat_cap()) {
                 return Err("Invalid local player count".to_string());
             }
 
-            if lobby.free_seats() < local_players {
+            if lobby.free_seats() < local_players || !lobby.has_room_for_device() {
                 return Err(format!("Lobby {} is full", room_id));
             }
 
@@ -1077,6 +1077,15 @@ mod tests {
     use super::test_support::*;
     use super::*;
 
+    #[test]
+    fn a_device_leaves_a_seat_for_someone_else() {
+        assert!(is_valid_local_players(3, crate::constants::MAX_PLAYERS));
+        assert!(!is_valid_local_players(4, crate::constants::MAX_PLAYERS));
+        assert!(!is_valid_local_players(0, crate::constants::MAX_PLAYERS));
+        assert!(is_valid_local_players(7, 8));
+        assert!(!is_valid_local_players(8, 8));
+    }
+
     #[tokio::test]
     async fn private_lobby_gets_code_and_hides_from_browser() {
         let host = test_addr(1);
@@ -1344,6 +1353,51 @@ mod tests {
             .unwrap();
         assert_eq!(lobby.spectators().len(), 1);
         assert_eq!(lobby.players().len(), 4);
+    }
+
+    #[tokio::test]
+    async fn join_needs_room_for_another_device() {
+        let addrs: Vec<SocketAddr> = (1..=crate::constants::MAX_DEVICES as u8 + 1)
+            .map(test_addr)
+            .collect();
+        let state = state_with_clients(&addrs).await;
+
+        let base = lobby_payload(LobbyKind::Standard, "room-1");
+        let mut wide = LobbyBuilder::new()
+            .name("tester".to_string())
+            .room_id("room-1".to_string())
+            .max_players(8)
+            .game_data(base.game_data())
+            .players(base.players())
+            .mods(vec![Mod::new(
+                crate::state::WIDER_SET_MOD_NAME.to_string(),
+                [("IsWide", "True"), ("Seats", "8")]
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            )])
+            .build();
+        state.add_lobby(&mut wide, addrs[0], 1).await.unwrap();
+
+        for addr in &addrs[1..crate::constants::MAX_DEVICES] {
+            state
+                .join_lobby("room-1".to_string(), *addr, "p".to_string(), true, 1)
+                .await
+                .unwrap();
+        }
+
+        let err = state
+            .join_lobby(
+                "room-1".to_string(),
+                addrs[crate::constants::MAX_DEVICES],
+                "p".to_string(),
+                true,
+                1,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err, "Lobby room-1 is full");
+        assert!(state.get_lobbies(addrs[0]).await.is_empty());
     }
 
     #[tokio::test]
