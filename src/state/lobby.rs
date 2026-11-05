@@ -5,7 +5,9 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::constants::{MAX_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE, WIDE_MAX_PLAYERS};
+use crate::constants::{
+    MAX_DEVICES, MAX_PLAYERS, SERIES_TEAM_SIZE, TEAM_DEATHMATCH_MODE, WIDE_MAX_PLAYERS,
+};
 use crate::services::geoip::Location;
 use crate::state::connectivity::{peers_of, Connectivity, ConnectivityUpdate, PeerPair};
 use crate::state::series::Series;
@@ -302,6 +304,10 @@ impl Lobby {
 
     pub fn peer_count(&self) -> usize {
         self.player_peers().len()
+    }
+
+    pub fn has_room_for_device(&self) -> bool {
+        self.peer_count() < MAX_DEVICES
     }
 
     pub fn seats_from(&self, addr: &str) -> Vec<usize> {
@@ -1030,6 +1036,23 @@ mod tests {
         let wide = lobby(wider_set(&[("IsWide", "True"), ("Seats", "8")]));
         assert_eq!(wide.seat_cap(), WIDE_MAX_PLAYERS.clamp(MAX_PLAYERS, 8));
         assert_eq!(wide.max_players(), WIDE_MAX_PLAYERS.clamp(MAX_PLAYERS, 8));
+    }
+
+    #[test]
+    fn a_lobby_takes_up_to_max_devices() {
+        let mut wide = lobby(wider_set(&[("IsWide", "True"), ("Seats", "8")]));
+        for device in 0..MAX_DEVICES {
+            assert!(wide.has_room_for_device());
+            let owner = Player::new(
+                format!("p{}", device),
+                format!("127.0.0.{}:4000", device),
+                format!("peer-{}", device),
+                device == 0,
+            );
+            wide.add_player_device(owner, 1);
+        }
+        assert_eq!(wide.peer_count(), MAX_DEVICES);
+        assert!(!wide.has_room_for_device());
     }
 
     #[test]

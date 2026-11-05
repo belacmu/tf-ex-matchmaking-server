@@ -9,6 +9,9 @@ pub const MAX_PLAYERS: usize = 4;
 
 pub const WIDE_MAX_PLAYERS: usize = 4;
 
+/// Every device connects to every other one, so a lobby holds at most this many; more players share a device
+pub const MAX_DEVICES: usize = 4;
+
 /// How long players get to pick an end match option before the undecided ones are dropped
 pub static END_GAME_CHOICE_SECONDS: u64 = 30;
 pub static RANKED_END_GAME_CHOICE_SECONDS: u64 = 10;
